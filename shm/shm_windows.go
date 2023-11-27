@@ -38,6 +38,7 @@ func nsCreateFileMapping(hFile syscall.Handle, lpFileMappingAttributes uintptr, 
 	runtime.KeepAlive(b)
 
 	if ret == 0 || err == ERROR_ALREADY_EXISTS {
+		// TODO: investigate case where ret == 0 && err == nil.
 		return syscall.InvalidHandle, err
 	}
 
@@ -82,10 +83,8 @@ func OpenSharedMemory(name string, size int, flags int, mode os.FileMode) (*Shar
 		prot := 0
 		if flags&os.O_RDWR != 0 {
 			prot = syscall.PAGE_READWRITE
-		} else if flags&os.O_RDONLY != 0 {
+		} else if flags == os.O_RDONLY {
 			prot = syscall.PAGE_READONLY
-		} else if flags&os.O_WRONLY != 0 {
-			prot = syscall.PAGE_READWRITE
 		}
 
 		fd, err := nsCreateFileMapping(
