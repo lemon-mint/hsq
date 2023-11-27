@@ -28,6 +28,7 @@ func TestSharedMemoryMap(t *testing.T) {
 	defer sm.Delete()
 	defer sm.Close()
 
+	println("fd:", sm.FD())
 	b, err := mmap.Map(sm.FD(), 0, pagesize, mmap.PROT_READ|mmap.PROT_WRITE, mmap.MAP_SHARED)
 	if err != nil {
 		t.Fatal(err)
