@@ -40,6 +40,11 @@ func nsUnmapViewOfFile(lpBaseAddress uintptr) error {
 
 func Map(fd uintptr, offset int, len int, prot int, flags int) ([]byte, error) {
 	_ = flags
+
+	if prot&(PROT_READ|PROT_WRITE) != 0 {
+		prot = PROT_WRITE
+	}
+
 	base, err := nsMapViewOfFile(syscall.Handle(fd), uint32(prot), uint64(offset), uint64(len))
 	if err != nil {
 		return nil, err
