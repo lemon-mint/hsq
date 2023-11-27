@@ -10,7 +10,7 @@ import (
 	"unsafe"
 )
 
-func ShmOpen(name string, oflag int, mode os.FileMode) (fd int, err error) {
+func shmOpen(name string, oflag int, mode os.FileMode) (fd int, err error) {
 	b, err := syscall.BytePtrFromString(name)
 	if err != nil {
 		return 0, err
@@ -30,7 +30,7 @@ func ShmOpen(name string, oflag int, mode os.FileMode) (fd int, err error) {
 	return int(f), nil
 }
 
-func ShmUnlink(name string) error {
+func shmUnlink(name string) error {
 	b, err := syscall.BytePtrFromString(name)
 	if err != nil {
 		return err
@@ -47,4 +47,34 @@ func ShmUnlink(name string) error {
 		return errno
 	}
 	return nil
+}
+
+func OpenSharedMemory(name string, size int, flags int, mode os.FileMode) (*SharedMemory, error) {
+	s := &SharedMemory{
+		name: name,
+		size: size,
+	}
+
+	fd, err := shmOpen(name, flags, mode)
+	if err != nil {
+		return nil, err
+	}
+	s.fd = uintptr(fd)
+
+	if flags&os.O_CREATE != 0 {
+		err = syscall.Ftruncate(fd, int64(size))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return s, nil
+}
+
+func (s *SharedMemory) Delete() error {
+	return shmUnlink(s.name)
+}
+
+func (s *SharedMemory) Close() error {
+	return syscall.Close(int(s.fd))
 }

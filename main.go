@@ -9,40 +9,46 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/lemon-mint/hsq/internal/mmap"
-	"github.com/lemon-mint/hsq/internal/shm"
 	"github.com/lemon-mint/hsq/offheap/ring"
-	"golang.org/x/sys/unix"
+	"github.com/lemon-mint/hsq/shm"
+	"github.com/lemon-mint/hsq/shm/mmap"
 )
 
 var pagesize = syscall.Getpagesize()
 
 func main() {
-	if len(os.Args) < 2 {
+	if len(os.Args) < 2 || os.Args[1] != "p" && os.Args[1] != "c" {
 		fmt.Println("Usage: hsq <p|c>")
 		os.Exit(1)
 	}
 
-	fd, err := shm.ShmOpen("/hsq", os.O_CREATE|os.O_RDWR, 0666)
-	if err != nil {
-		panic(fd)
-	}
-	defer shm.ShmUnlink("/hsq")
-	defer syscall.Close(fd)
+	var sm *shm.SharedMemory
+	var err error
+	var b []byte
+
 	const required = 256 + 16*256
 	size := ((required + pagesize - 1) / pagesize) * pagesize
+
 	if os.Args[1] == "p" {
-		err = syscall.Ftruncate(fd, int64(size))
+		sm, err = shm.OpenSharedMemory("/hsq", size, os.O_RDWR|os.O_CREATE, 0600)
 		if err != nil {
 			panic(err)
 		}
+		defer sm.Delete()
+		defer sm.Close()
+	} else if os.Args[1] == "c" {
+		sm, err = shm.OpenSharedMemory("/hsq", size, os.O_RDWR, 0600)
+		if err != nil {
+			panic(err)
+		}
+		defer sm.Close()
 	}
 
-	m, err := mmap.Map(fd, 0, size, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
+	b, err = mmap.Map(sm.FD(), 0, size, mmap.PROT_READ|mmap.PROT_WRITE, mmap.MAP_SHARED)
 	if err != nil {
 		panic(err)
 	}
-	defer mmap.UnMap(m)
+	defer mmap.UnMap(b)
 
 	var wg sync.WaitGroup
 	var stop uint32
@@ -50,7 +56,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		h := uintptr(unsafe.Pointer(&m[0]))
+		h := uintptr(unsafe.Pointer(unsafe.SliceData(b)))
 
 		if os.Args[1] == "p" {
 			ring.MPMCInit(h, 256)
