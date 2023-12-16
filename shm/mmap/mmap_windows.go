@@ -30,7 +30,10 @@ func nsMapViewOfFile(hFile syscall.Handle, dwDesiredAccess uint32, FileOffset ui
 		uintptr(FileOffset&0xffffffff),
 		uintptr(dwNumberOfBytesToMap),
 	)
-	return ret, err
+	if ret == 0 {
+		return 0, err
+	}
+	return ret, nil
 }
 
 func nsUnmapViewOfFile(lpBaseAddress uintptr) error {
