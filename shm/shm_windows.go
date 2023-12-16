@@ -12,8 +12,8 @@ import (
 )
 
 var kernel32 = syscall.NewLazyDLL("Kernel32.dll")
-var _CreateFileMappingA = kernel32.NewProc("CreateFileMappingA")
-var _OpenFileMappingA = kernel32.NewProc("OpenFileMappingA")
+var _CreateFileMappingW = kernel32.NewProc("CreateFileMappingW")
+var _OpenFileMappingW = kernel32.NewProc("OpenFileMappingW")
 var _MapViewOfFile = kernel32.NewProc("MapViewOfFile")
 
 const ERROR_ALREADY_EXISTS syscall.Errno = 183
@@ -27,7 +27,7 @@ func nsCreateFileMapping(hFile syscall.Handle, lpFileMappingAttributes uintptr, 
 	high := uint32(MaximumSize >> 32)
 	low := uint32(MaximumSize & 0xffffffff)
 
-	ret, _, err := _CreateFileMappingA.Call(
+	ret, _, err := _CreateFileMappingW.Call(
 		uintptr(hFile),
 		lpFileMappingAttributes,
 		uintptr(flProtect),
@@ -56,7 +56,7 @@ func nsOpenFileMapping(dwDesiredAccess uint32, bInheritHandle bool, lpName strin
 		inherit = 1
 	}
 
-	ret, _, err := _OpenFileMappingA.Call(
+	ret, _, err := _OpenFileMappingW.Call(
 		uintptr(dwDesiredAccess),
 		uintptr(inherit),
 		uintptr(unsafe.Pointer(b)),
