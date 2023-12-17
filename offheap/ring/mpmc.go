@@ -27,8 +27,8 @@ func MPMCInit(h uintptr, size uint64) bool {
 		//_head := h
 		_data := h + 256
 		for i := uint64(0); i < size; i++ {
-			atomic.StoreUintptr((*uintptr)(unsafe.Pointer(_data+uintptr(16*i))), 0)
-			atomic.StoreUint64((*uint64)(unsafe.Pointer(_data+uintptr(16*i+8))), i)
+			atomic.StoreUintptr((*uintptr)(unsafe.Pointer(_data+unsafe.Sizeof(_melem{})*uintptr(i))), 0)
+			atomic.StoreUint64((*uint64)(unsafe.Pointer(_data+unsafe.Sizeof(_melem{})*uintptr(i)+unsafe.Offsetof(_melem{}._seq))), i)
 		}
 
 		atomic.StoreUint64(&_r.r, 0)
@@ -85,7 +85,7 @@ func (m *MPMCRing) Enqueue(ptr uintptr) {
 		runtime.Gosched()
 	}
 
-	c.ptr = ptr
+	c._data = ptr
 	atomic.StoreUint64(&c._seq, p+1)
 }
 
@@ -95,7 +95,7 @@ func (m *MPMCRing) Dequeue() (ptr uintptr) {
 	var c *_melem
 	p := atomic.LoadUint64(&_h.r)
 	for {
-		c = (*_melem)(unsafe.Pointer(m._data + uintptr(16*(p&m._mask))))
+		c = (*_melem)(unsafe.Pointer(m._data + unsafe.Sizeof(_melem{})*uintptr(p&m._mask)))
 		seq := atomic.LoadUint64(&c._seq)
 		diff := seq - (p + 1)
 		if diff == 0 {
@@ -109,7 +109,7 @@ func (m *MPMCRing) Dequeue() (ptr uintptr) {
 		}
 	}
 
-	ptr = c.ptr
+	ptr = c._data
 	atomic.StoreUint64(&c._seq, p+m._mask+1)
 	return
 }
@@ -137,8 +137,8 @@ type _mring struct {
 }
 
 type _melem struct {
-	ptr  uintptr
-	_seq uint64
+	_data uintptr
+	_seq  uint64
 }
 
 // https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
