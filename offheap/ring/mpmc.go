@@ -7,14 +7,14 @@ import (
 	"unsafe"
 )
 
-type MPMCRing struct {
+type MPMCRing[T any] struct {
 	_mask uint64
 	_size uint64
 	_head uintptr
 	_data uintptr
 }
 
-func MPMCInit(h uintptr, size uint64) bool {
+func MPMCInit[T any](h uintptr, size uint64) bool {
 	size = _RoundUpPowerOf2(size)
 	_r := (*_mring)(unsafe.Pointer(h))
 	magic := atomic.LoadUint64(&_r._magic)
@@ -27,8 +27,9 @@ func MPMCInit(h uintptr, size uint64) bool {
 		//_head := h
 		_data := h + 256
 		for i := uint64(0); i < size; i++ {
-			atomic.StoreUintptr((*uintptr)(unsafe.Pointer(_data+unsafe.Sizeof(_melem{})*uintptr(i))), 0)
-			atomic.StoreUint64((*uint64)(unsafe.Pointer(_data+unsafe.Sizeof(_melem{})*uintptr(i)+unsafe.Offsetof(_melem{}._seq))), i)
+			_e := (*_melem[T])(unsafe.Pointer(_data + unsafe.Sizeof(_melem[T]{})*uintptr(i)))
+			_e._data = *new(T)
+			_e._seq = i
 		}
 
 		atomic.StoreUint64(&_r.r, 0)
@@ -40,7 +41,7 @@ func MPMCInit(h uintptr, size uint64) bool {
 	return false
 }
 
-func MPMCAttach(h uintptr, timeout time.Duration) *MPMCRing {
+func MPMCAttach[T any](h uintptr, timeout time.Duration) *MPMCRing[T] {
 	_tt := time.Now()
 	_r := (*_mring)(unsafe.Pointer(h))
 	for {
@@ -48,7 +49,7 @@ func MPMCAttach(h uintptr, timeout time.Duration) *MPMCRing {
 		flag := atomic.LoadUint64(&_r._flag)
 		size := atomic.LoadUint64(&_r._size)
 		if magic == _mpmc_magic && flag&uint64(_mpmc_init) != 0 {
-			return &MPMCRing{
+			return &MPMCRing[T]{
 				_size: size,
 				_mask: size - 1,
 				_head: h,
@@ -63,13 +64,13 @@ func MPMCAttach(h uintptr, timeout time.Duration) *MPMCRing {
 	}
 }
 
-func (m *MPMCRing) Enqueue(ptr uintptr) {
+func (m *MPMCRing[T]) Enqueue(elem T) {
 	_h := (*_mring)(unsafe.Pointer(m._head))
 
-	var c *_melem
+	var c *_melem[T]
 	p := atomic.LoadUint64(&_h.w)
 	for {
-		c = (*_melem)(unsafe.Pointer(m._data + uintptr(16*(p&m._mask))))
+		c = (*_melem[T])(unsafe.Pointer(m._data + unsafe.Sizeof(_melem[T]{})*uintptr(p&m._mask)))
 		seq := atomic.LoadUint64(&c._seq)
 		diff := seq - p
 		if diff == 0 {
@@ -85,17 +86,17 @@ func (m *MPMCRing) Enqueue(ptr uintptr) {
 		runtime.Gosched()
 	}
 
-	c._data = ptr
+	c._data = elem
 	atomic.StoreUint64(&c._seq, p+1)
 }
 
-func (m *MPMCRing) Dequeue() (ptr uintptr) {
+func (m *MPMCRing[T]) Dequeue() (elem T) {
 	_h := (*_mring)(unsafe.Pointer(m._head))
 
-	var c *_melem
+	var c *_melem[T]
 	p := atomic.LoadUint64(&_h.r)
 	for {
-		c = (*_melem)(unsafe.Pointer(m._data + unsafe.Sizeof(_melem{})*uintptr(p&m._mask)))
+		c = (*_melem[T])(unsafe.Pointer(m._data + unsafe.Sizeof(_melem[T]{})*uintptr(p&m._mask)))
 		seq := atomic.LoadUint64(&c._seq)
 		diff := seq - (p + 1)
 		if diff == 0 {
@@ -109,7 +110,7 @@ func (m *MPMCRing) Dequeue() (ptr uintptr) {
 		}
 	}
 
-	ptr = c._data
+	elem = c._data
 	atomic.StoreUint64(&c._seq, p+m._mask+1)
 	return
 }
@@ -136,9 +137,10 @@ type _mring struct {
 	_p1 [_CACHE_LINE - 1]uint64
 }
 
-type _melem struct {
-	_data uintptr
-	_seq  uint64
+type _melem[T any] struct {
+	_data T
+
+	_seq uint64
 }
 
 // https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
@@ -152,4 +154,8 @@ func _RoundUpPowerOf2(v uint64) uint64 {
 	v |= v >> 32
 	v++
 	return v
+}
+
+func SizeMPMCRing[T any](len uintptr) uintptr {
+	return 256 + unsafe.Sizeof(_mring{}) + unsafe.Sizeof(_melem[T]{})*len
 }

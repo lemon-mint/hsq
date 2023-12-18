@@ -9,12 +9,12 @@ import (
 
 func TestMPMC(t *testing.T) {
 	const size = 128
-	buffer := make([]byte, 256+16*size)
+	buffer := make([]byte, ring.SizeMPMCRing[uintptr](size))
 	b := uintptr(unsafe.Pointer(&buffer[0]))
-	if !ring.MPMCInit(b, size) {
+	if !ring.MPMCInit[uintptr](b, size) {
 		panic("failed to initialize offheap mpmc ring")
 	}
-	r := ring.MPMCAttach(b, 0)
+	r := ring.MPMCAttach[uintptr](b, 0)
 	for i := uintptr(0); i < size; i++ {
 		r.Enqueue(i)
 	}
@@ -28,13 +28,13 @@ func TestMPMC(t *testing.T) {
 
 func BenchmarkMPMC(b *testing.B) {
 	const size = 128
-	buffer := make([]byte, 256+16*size)
+	buffer := make([]byte, ring.SizeMPMCRing[uintptr](size))
 	bb := uintptr(unsafe.Pointer(&buffer[0]))
-	if !ring.MPMCInit(bb, size) {
+	if !ring.MPMCInit[uintptr](bb, size) {
 		panic("failed to initialize offheap mpmc ring")
 	}
 	b.RunParallel(func(p *testing.PB) {
-		r := ring.MPMCAttach(bb, 0)
+		r := ring.MPMCAttach[uintptr](bb, 0)
 		for p.Next() {
 			r.Enqueue(0)
 			_ = r.Dequeue()
