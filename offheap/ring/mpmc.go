@@ -90,6 +90,32 @@ func (m *MPMCRing[T]) Enqueue(elem T) {
 	atomic.StoreUint64(&c._seq, p+1)
 }
 
+func (m *MPMCRing[T]) EnqueueFunc(fn func(*T)) {
+	_h := (*_mring)(unsafe.Pointer(m._head))
+
+	var c *_melem[T]
+	p := atomic.LoadUint64(&_h.w)
+	for {
+		c = (*_melem[T])(unsafe.Pointer(m._data + unsafe.Sizeof(_melem[T]{})*uintptr(p&m._mask)))
+		seq := atomic.LoadUint64(&c._seq)
+		diff := seq - p
+		if diff == 0 {
+			if atomic.CompareAndSwapUint64(&_h.w, p, p+1) {
+				break
+			}
+		} else if diff > 0 {
+			p = atomic.LoadUint64(&_h.w)
+		} else {
+			panic("unreachable")
+		}
+
+		runtime.Gosched()
+	}
+
+	fn(&c._data)
+	atomic.StoreUint64(&c._seq, p+1)
+}
+
 func (m *MPMCRing[T]) Dequeue() (elem T) {
 	_h := (*_mring)(unsafe.Pointer(m._head))
 
@@ -111,6 +137,31 @@ func (m *MPMCRing[T]) Dequeue() (elem T) {
 	}
 
 	elem = c._data
+	atomic.StoreUint64(&c._seq, p+m._mask+1)
+	return
+}
+
+func (m *MPMCRing[T]) DequeueFunc(fn func(*T)) {
+	_h := (*_mring)(unsafe.Pointer(m._head))
+
+	var c *_melem[T]
+	p := atomic.LoadUint64(&_h.r)
+	for {
+		c = (*_melem[T])(unsafe.Pointer(m._data + unsafe.Sizeof(_melem[T]{})*uintptr(p&m._mask)))
+		seq := atomic.LoadUint64(&c._seq)
+		diff := seq - (p + 1)
+		if diff == 0 {
+			if atomic.CompareAndSwapUint64(&_h.r, p, p+1) {
+				break
+			}
+		} else if diff > 0 {
+			p = atomic.LoadUint64(&_h.r)
+		} else {
+			panic("unreachable")
+		}
+	}
+
+	fn(&c._data)
 	atomic.StoreUint64(&c._seq, p+m._mask+1)
 	return
 }
