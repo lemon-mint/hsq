@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/lemon-mint/hsq/offheap/ring"
+	"github.com/lemon-mint/hsq/internal/offheap/ring"
 )
 
 func TestMPMC(t *testing.T) {

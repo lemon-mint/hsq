@@ -5,8 +5,8 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/lemon-mint/hsq/shm"
-	"github.com/lemon-mint/hsq/shm/mmap"
+	"github.com/lemon-mint/hsq/internal/mmap"
+	"github.com/lemon-mint/hsq/internal/shm"
 )
 
 var pagesize = syscall.Getpagesize()

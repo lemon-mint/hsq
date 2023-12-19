@@ -22,14 +22,14 @@ jobs:
         go-version: 'stable'
 
     - name: Run Benchmark
-      run: go test -bench 'BenchmarkMPMC' -benchmem ./offheap/ring -benchtime 10s | tee BenchmarkMPMC.txt
+      run: go test -bench . -benchmem -benchtime 5s ./... | tee benchmark.txt
 
     - name: Store benchmark result
       uses: benchmark-action/github-action-benchmark@v1
       with:
         name: Go Benchmark
         tool: 'go'
-        output-file-path: BenchmarkMPMC.txt
+        output-file-path: benchmark.txt
         github-token: ${{ secrets.GHBOT_TOKEN }}
         auto-push: true
         alert-threshold: '150%'
