@@ -27,6 +27,68 @@ func TestMPMC(t *testing.T) {
 	}
 }
 
+func TestMPMCUint8(t *testing.T) {
+	const size = 128
+	buffer := make([]byte, ring.SizeMPMCRing[uint8](size))
+	b := uintptr(unsafe.Pointer(&buffer[0]))
+	if !ring.MPMCInit[uint8](b, size) {
+		panic("failed to initialize offheap mpmc ring")
+	}
+	r := ring.MPMCAttach[uint8](b, 0)
+	for i := uint8(0); i < size; i++ {
+		r.Enqueue(i)
+	}
+	for i := uint8(0); i < size; i++ {
+		n := r.Dequeue()
+		if n != i {
+			panic("queue sequence violation")
+		}
+	}
+}
+
+func TestMPMCComplex128(t *testing.T) {
+	const size = 128
+	buffer := make([]byte, ring.SizeMPMCRing[complex128](size))
+	b := uintptr(unsafe.Pointer(&buffer[0]))
+	if !ring.MPMCInit[complex128](b, size) {
+		panic("failed to initialize offheap mpmc ring")
+	}
+	r := ring.MPMCAttach[complex128](b, 0)
+	for i := 0; i < 10; i++ {
+		for ii := uint8(0); ii < size; ii++ {
+			r.Enqueue(complex(0, 0))
+		}
+		for ii := uint8(0); ii < size; ii++ {
+			n := r.Dequeue()
+			_ = n
+		}
+	}
+}
+
+type _chunk struct {
+	_pointer uintptr // relative pointer to the start of the buffer
+	_size    uintptr // size of the chunk
+}
+
+func TestMPMCChunk(t *testing.T) {
+	const size = 128
+	buffer := make([]byte, ring.SizeMPMCRing[_chunk](size))
+	b := uintptr(unsafe.Pointer(&buffer[0]))
+	if !ring.MPMCInit[_chunk](b, size) {
+		panic("failed to initialize offheap mpmc ring")
+	}
+	r := ring.MPMCAttach[_chunk](b, 0)
+
+	for i := 0; i < 10; i++ {
+		for ii := uint8(0); ii < size; ii++ {
+			r.Enqueue(_chunk{})
+		}
+		for ii := uint8(0); ii < size; ii++ {
+			_ = r.Dequeue()
+		}
+	}
+}
+
 func TestMPMCFunc(t *testing.T) {
 	const size = 128
 	buffer := make([]byte, ring.SizeMPMCRing[uintptr](size))
