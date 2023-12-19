@@ -3,6 +3,8 @@ name: Go Bench
 on:
   push:
     branches: [ "main" ]
+  schedule:
+    - cron: '17 2 * * *'
 
 permissions:
   contents: write
