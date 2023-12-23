@@ -111,10 +111,13 @@ func BenchmarkBufferRing(b *testing.B) {
 	buffer := make([]byte, size)
 	bufring.NewBufferRing(uintptr(unsafe.Pointer(&buffer[0])), 128, 8388480, false) // Init BufferRing
 	b.SetBytes(int64(size))
+	runtime.GC()
 	b.ResetTimer()
 
 	b.RunParallel(func(p *testing.PB) {
 		ring := bufring.NewBufferRing(uintptr(unsafe.Pointer(&buffer[0])), 128, 8388480, false)
+		var v byte
+
 		for p.Next() {
 			ring.Send(func(b []byte) []byte {
 				for i := range b {
@@ -125,9 +128,11 @@ func BenchmarkBufferRing(b *testing.B) {
 
 			ring.Receive(func(b []byte) {
 				for i := range b {
-					_ = b[i]
+					v = b[i]
 				}
 			})
 		}
+
+		_ = v
 	})
 }
