@@ -1,6 +1,7 @@
 package ring
 
 import (
+	"context"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -64,6 +65,40 @@ func MPMCAttach[T any](h uintptr, timeout time.Duration) *MPMCRing[T] {
 	}
 }
 
+func (m *MPMCRing[T]) EnqueueWithContext(ctx context.Context, elem T) bool {
+	done := ctx.Done()
+	_h := (*_mring)(unsafe.Pointer(m._head))
+
+	var c *_melem[T]
+	p := atomic.LoadUint64(&_h.w)
+	for {
+		select {
+		case <-done:
+			return false
+		default:
+		}
+
+		c = (*_melem[T])(unsafe.Pointer(m._data + unsafe.Sizeof(_melem[T]{})*uintptr(p&m._mask)))
+		seq := atomic.LoadUint64(&c._seq)
+		diff := seq - p
+		if diff == 0 {
+			if atomic.CompareAndSwapUint64(&_h.w, p, p+1) {
+				break
+			}
+		} else if diff > 0 {
+			p = atomic.LoadUint64(&_h.w)
+		} else {
+			panic("unreachable")
+		}
+
+		runtime.Gosched()
+	}
+
+	c._data = elem
+	atomic.StoreUint64(&c._seq, p+1)
+	return true
+}
+
 func (m *MPMCRing[T]) Enqueue(elem T) {
 	_h := (*_mring)(unsafe.Pointer(m._head))
 
@@ -114,6 +149,40 @@ func (m *MPMCRing[T]) EnqueueFunc(fn func(*T)) {
 
 	fn(&c._data)
 	atomic.StoreUint64(&c._seq, p+1)
+}
+
+func (m *MPMCRing[T]) DequeueWithContext(ctx context.Context) (elem T, ok bool) {
+	done := ctx.Done()
+	_h := (*_mring)(unsafe.Pointer(m._head))
+
+	var c *_melem[T]
+	p := atomic.LoadUint64(&_h.r)
+	for {
+		select {
+		case <-done:
+			ok = false
+			return
+		default:
+		}
+
+		c = (*_melem[T])(unsafe.Pointer(m._data + unsafe.Sizeof(_melem[T]{})*uintptr(p&m._mask)))
+		seq := atomic.LoadUint64(&c._seq)
+		diff := seq - (p + 1)
+		if diff == 0 {
+			if atomic.CompareAndSwapUint64(&_h.r, p, p+1) {
+				break
+			}
+		} else if diff > 0 {
+			p = atomic.LoadUint64(&_h.r)
+		} else {
+			panic("unreachable")
+		}
+	}
+
+	elem = c._data
+	ok = true
+	atomic.StoreUint64(&c._seq, p+m._mask+1)
+	return
 }
 
 func (m *MPMCRing[T]) Dequeue() (elem T) {
